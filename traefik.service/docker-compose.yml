@@ -1,0 +1,58 @@
+version: '3.5'
+
+networks:
+  traefik:
+    name: traefik
+
+services:
+
+  traefik:
+    image: traefik:v2.6
+    container_name: ${PROXY_CNAME}
+    command:
+      - '--api'
+      - '--api.dashboard'
+      - '--providers.docker'
+      #- '--api.insecure'   # disabled, it opens dashboard on port 8080
+      #- '--entryPoints.traefik.address=:8090'
+      - '--entryPoints.web.address=:${PROXY_HTTP_PORT}'
+      - '--entryPoints.web.proxyProtocol.insecure'
+      #- '--entrypoints.web.http.redirections.entryPoint.to=websecure'
+      #- '--entrypoints.web.http.redirections.entryPoint.scheme=https'
+      - '--entryPoints.websecure.address=:${PROXY_HTTPS_PORT}'
+      - '--providers.providersThrottleDuration=2s'
+      - '--providers.docker.watch=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--providers.docker.defaultRule=Host(`${PROXY_HOST}`)'
+      - '--accessLog.bufferingSize=0'
+      - '--certificatesresolvers.myresolver.acme.email=${MAINTAINER_EMAIL}'
+      - '--certificatesresolvers.myresolver.acme.storage=traefik-certs.json'
+      - '--certificatesresolvers.myresolver.acme.httpchallenge=true'
+      - '--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=${PROXY_PORT}'
+      - '--ping.entryPoint=web'
+      #- '--log.level=DEBUG'
+    ports:
+      - "${PROXY_HTTPS_PORT}:443"
+      - "${PROXY_HTTP_PORT}:80"
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      #- '../${VOLUME_DIR}/traefik-certs.json:/traefik-certs.json'
+    labels:
+      - 'traefik.enable=true'
+      #- 'traefik.http.routers.traefik.rule=Host(`${PROXY_HOST}`) && ((PathPrefix(`/traefik`) || PathPrefix(`/api/`)))'
+      - 'traefik.http.routers.traefik.rule=Host(`${PROXY_HOST}`) && ((PathPrefix(`/traefik`) || Headers(`Referer`, `https://${PROXY_HOST}/traefik/dashboard/`)))'
+      - 'traefik.http.routers.traefik.priority=100'
+      - 'traefik.http.routers.traefik.service=api@internal'
+      - 'traefik.http.routers.traefik.middlewares=traefik-strip'
+      - 'traefik.http.middlewares.traefik-strip.stripprefix.prefixes=/traefik'
+      - 'traefik.http.routers.traefik.entrypoints=${PROXY_PORT}'
+      - 'traefik.http.routers.traefik.tls=${PROXY_TLS}'
+      - 'traefik.http.routers.traefik.tls.certresolver=myresolver'
+    logging:
+      driver: json-file
+      options:
+        'max-size': '10m'
+        'max-file': '5'
+    networks:
+      - traefik
+
