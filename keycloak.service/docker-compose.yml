@@ -1,0 +1,61 @@
+version: '3'
+
+networks:
+  traefik:
+    external: true
+
+services:
+
+  keycloakdb:
+    image: mariadb
+    container_name: ${KEYCLOAK_DB_CNAME}
+    volumes:
+      - ../${DATA_DIR}/keycloak-db:/var/lib/mysql/
+    environment:
+      MARIADB_ROOT_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      MARIADB_DATABASE: keycloak
+    networks:
+      - traefik
+    healthcheck:
+      test: ["CMD", "mysql", "--user=root", "--password=${KEYCLOAK_DB_PASSWORD}", '--database keycloak', '-e "SHOW TABLES;"']
+      interval: 10s
+      timeout: 2s
+      retries: 10
+
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: ${KEYCLOAK_CNAME}
+    volumes:  # Ezekben vannak a konfigurációs beállítások, ill. a themes
+      #- ../${VOLUME_DIR}/keycloak/keycloak.conf:/opt/keycloak/conf/keycloak.conf
+      - ../${DATA_DIR}/keycloak-themes:/opt/keycloak/themes
+    command:
+      # TODO: dev konténer helyett optimized
+      # https://www.keycloak.org/server/containers
+      #- 'start'
+      #- '--auto-build'
+      - 'start-dev'
+      - '--db=mariadb'
+      - '--db-url-host=${KEYCLOAK_DB_CNAME}'
+      - '--db-username=root'
+      - '--db-password=${KEYCLOAK_DB_PASSWORD}'
+      - '--db-url-database=keycloak'
+      - '--proxy edge'
+      - '--hostname=${KEYCLOAK_HOST}'
+      - '--http-relative-path=/auth'
+      - '--hostname-strict-https=false'
+      - '--hostname-strict=false'
+      - '--features=declarative-user-profile'
+      #- '--hostname-path=/auth'
+    env_file: .env
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.${KEYCLOAK_CNAME}.rule=Host(`${KEYCLOAK_HOST}`) && PathPrefix(`/auth`)'
+      - 'traefik.http.routers.${KEYCLOAK_CNAME}.entrypoints=${KEYCLOAK_PORT}'
+      - 'traefik.http.routers.${KEYCLOAK_CNAME}.tls=${KEYCLOAK_TLS}'
+      - 'traefik.http.routers.${KEYCLOAK_CNAME}.tls.certresolver=myresolver'
+    networks:
+      - traefik
+    depends_on:
+      - keycloakdb
+

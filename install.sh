@@ -42,7 +42,6 @@ function fatal {
 function warning {
   echo -e "[\e[33mWARNING\e[0m] $*"
   sleep 2
-  exit 2
 }
 
 # Set up a component
@@ -73,8 +72,10 @@ source config.txt
 
 if [ "$sname" == "install.sh" ]; then
   setup Deploy traefik
+  setup Deploy keycloak
 else
   cmd="down"
+  setup Uninstall keycloak
   setup Uninstall traefik
   docker volume prune
   docker image prune -a
